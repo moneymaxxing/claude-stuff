@@ -157,6 +157,41 @@
     min-height: 14px;
   }
 
+  .manual-fields {
+    display: none;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 13px;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+  }
+  .manual-fields.show { display: flex; }
+  .manual-note {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.5;
+    margin: 0;
+  }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+  .field input {
+    font-family: "IBM Plex Sans", sans-serif;
+    font-size: 13.5px;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+  .field input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
   button.primary {
     appearance: none;
     border: none;
@@ -303,9 +338,10 @@
     <div class="eyebrow">CTR Workshop &middot; 01</div>
     <h1>Thumbnail Test Bench</h1>
     <p class="sub">
-      Drop in a thumbnail. Claude reads the headline that's already on it, then drafts five
-      alternate takes — curiosity, bold claim, number, question, shock — rendered back onto
-      the image so you can compare them side by side before you upload.
+      Drop in a thumbnail. Claude reads the headline that's already on it (or works from a
+      quick description, if this view can't see images) and drafts five alternate takes —
+      curiosity, bold claim, number, question, shock — rendered back onto the image so you
+      can compare them side by side before you upload.
     </p>
   </header>
 
@@ -326,6 +362,21 @@
       </label>
 
       <div class="file-meta" id="fileMeta"></div>
+
+      <div class="manual-fields" id="manualFields">
+        <p class="manual-note">
+          This view can't send images to Claude, so it can't read the thumbnail directly.
+          Describe it below and headlines will be generated from that instead.
+        </p>
+        <div class="field">
+          <label for="topicInput">What's the thumbnail about?</label>
+          <input type="text" id="topicInput" placeholder="e.g. I built a PC for $100" />
+        </div>
+        <div class="field">
+          <label for="headlineInput">Current headline text (optional)</label>
+          <input type="text" id="headlineInput" placeholder="e.g. THIS SHOULDN'T WORK" />
+        </div>
+      </div>
 
       <button class="primary" id="generateBtn" disabled>Generate 5 headlines</button>
 
@@ -351,9 +402,9 @@
 
   <p class="footnote">
     Runs on your own Claude usage via this artifact's <code>sample</code> capability — no
-    server, no API key. Nothing you upload is stored; images are only sent to Claude for the
-    single analysis call. Saving a variant uses the <code>downloads</code> capability, so your
-    browser asks you to confirm each file.
+    server, no API key. Nothing you upload is stored; when this view can send images, yours
+    goes to Claude only for the one analysis call. Saving a variant uses the
+    <code>downloads</code> capability, so your browser asks you to confirm each file.
   </p>
 </div>
 
@@ -376,11 +427,26 @@
   const grid = document.getElementById("grid");
   const emptyState = document.getElementById("emptyState");
   const resultsCount = document.getElementById("resultsCount");
+  const manualFields = document.getElementById("manualFields");
+  const topicInput = document.getElementById("topicInput");
+  const headlineInput = document.getElementById("headlineInput");
 
   let currentFile = null;
   let currentImage = null; // HTMLImageElement, natural size
   let sampleApi = null;
   let downloadsApi = null;
+  let hasImages = false;
+
+  function canGenerate() {
+    if (!sampleApi || !currentImage) return false;
+    return hasImages || topicInput.value.trim().length > 0;
+  }
+
+  function refreshGenerateEnabled() {
+    generateBtn.disabled = !canGenerate();
+  }
+
+  topicInput.addEventListener("input", refreshGenerateEnabled);
 
   function setStatus(state, text) {
     statusDot.className = "status-dot" + (state ? " " + state : "");
@@ -411,8 +477,15 @@
       fileMeta.textContent = "";
       fileMeta.innerHTML =
         "<span>" + img.naturalWidth + "×" + img.naturalHeight + "</span><span>" + fmtBytes(file.size) + "</span>";
-      generateBtn.disabled = !sampleApi;
-      setStatus("", sampleApi ? "Ready to generate" : "Sampling unavailable in this view");
+      refreshGenerateEnabled();
+      setStatus(
+        "",
+        !sampleApi
+          ? "Sampling unavailable in this view"
+          : hasImages
+          ? "Ready to generate"
+          : "Ready — describe your thumbnail above to generate"
+      );
       scanEl.classList.remove("show");
       scanEl.innerHTML = "";
       clearResults();
@@ -469,11 +542,21 @@
     } catch (_) {
       downloadsApi = null;
     }
+    if (sampleApi) {
+      try {
+        const limits = await sampleApi.limits();
+        hasImages = !!(limits && limits.images);
+      } catch (_) {
+        hasImages = false;
+      }
+    }
+    manualFields.classList.toggle("show", !!sampleApi && !hasImages);
+
     if (!sampleApi) {
       setStatus("err", "This page needs to run inside a Claude viewer to generate headlines");
     } else if (currentImage) {
-      generateBtn.disabled = false;
-      setStatus("", "Ready to generate");
+      refreshGenerateEnabled();
+      setStatus("", hasImages ? "Ready to generate" : "Ready — describe your thumbnail above to generate");
     } else {
       setStatus("", "Waiting for a thumbnail");
     }
@@ -482,46 +565,78 @@
   // ---------- generation ----------
 
   generateBtn.addEventListener("click", async () => {
-    if (!sampleApi || !currentFile || !currentImage) return;
+    if (!canGenerate() || !currentFile || !currentImage) return;
     generateBtn.disabled = true;
-    setStatus("busy", "Reading the thumbnail...");
     scanEl.classList.remove("show");
     clearResults();
 
-    const prompt =
-      "You are looking at a YouTube thumbnail image. Do two things and reply with ONLY a single " +
-      "JSON object (no prose, no markdown fences):\n\n" +
-      "1. Read the thumbnail: its topic, the exact headline/caption text currently overlaid on it " +
-      "(or null if there is none), where that text sits, and how it's styled.\n" +
-      "2. Write 5 alternate headlines for the SAME thumbnail, one for each of these angles, in this " +
-      "exact order: curiosity gap, bold claim, number/stat, question, shock or controversy. Each " +
-      "headline must be short (2-6 words), punchy, and in the same tone as the original if one exists.\n\n" +
-      "Reply with exactly this shape:\n" +
-      "{\n" +
-      '  "topic": "short description of what the thumbnail is about",\n' +
-      '  "original_headline": "exact overlaid text, or null",\n' +
-      '  "bbox": [x0, y0, x1, y1],\n' +
-      '  "has_solid_box": true or false,\n' +
-      '  "box_color": "#RRGGBB or null",\n' +
-      '  "text_color": "#RRGGBB",\n' +
-      '  "style_notes": "brief note on font weight/case/style",\n' +
-      '  "headlines": ["...", "...", "...", "...", "..."]\n' +
-      "}\n\n" +
-      "bbox is the bounding box of the headline text (or its background box) as fractions of the " +
-      "image width/height, 0.0 to 1.0. If there is no existing text, pick a natural spot for a " +
-      "headline banner (commonly the bottom ~22% of the frame) and set has_solid_box to false.";
+    let sampleOptions = { modelTier: "default", cache: false };
+    let prompt;
+
+    if (hasImages) {
+      setStatus("busy", "Reading the thumbnail...");
+      prompt =
+        "You are looking at a YouTube thumbnail image. Do two things and reply with ONLY a single " +
+        "JSON object (no prose, no markdown fences):\n\n" +
+        "1. Read the thumbnail: its topic, the exact headline/caption text currently overlaid on it " +
+        "(or null if there is none), where that text sits, and how it's styled.\n" +
+        "2. Write 5 alternate headlines for the SAME thumbnail, one for each of these angles, in this " +
+        "exact order: curiosity gap, bold claim, number/stat, question, shock or controversy. Each " +
+        "headline must be short (2-6 words), punchy, and in the same tone as the original if one exists.\n\n" +
+        "Reply with exactly this shape:\n" +
+        "{\n" +
+        '  "topic": "short description of what the thumbnail is about",\n' +
+        '  "original_headline": "exact overlaid text, or null",\n' +
+        '  "bbox": [x0, y0, x1, y1],\n' +
+        '  "has_solid_box": true or false,\n' +
+        '  "box_color": "#RRGGBB or null",\n' +
+        '  "text_color": "#RRGGBB",\n' +
+        '  "style_notes": "brief note on font weight/case/style",\n' +
+        '  "headlines": ["...", "...", "...", "...", "..."]\n' +
+        "}\n\n" +
+        "bbox is the bounding box of the headline text (or its background box) as fractions of the " +
+        "image width/height, 0.0 to 1.0. If there is no existing text, pick a natural spot for a " +
+        "headline banner (commonly the bottom ~22% of the frame) and set has_solid_box to false.";
+      sampleOptions.images = [currentFile];
+    } else {
+      setStatus("busy", "Drafting headlines...");
+      const topic = topicInput.value.trim();
+      const original = headlineInput.value.trim();
+      prompt =
+        "A YouTube thumbnail is about: " +
+        topic +
+        "\n" +
+        "Its current headline text is: " +
+        (original || "(none given)") +
+        "\n\n" +
+        "Write 5 alternate headlines for this thumbnail, one for each of these angles, in this exact " +
+        "order: curiosity gap, bold claim, number/stat, question, shock or controversy. Each headline " +
+        "must be short (2-6 words), punchy, and in the same tone as the original if one exists.\n\n" +
+        "Reply with ONLY this JSON shape (no prose, no markdown fences):\n" +
+        "{\n" +
+        '  "topic": "' +
+        topic.replace(/"/g, "'") +
+        '",\n' +
+        '  "original_headline": ' +
+        (original ? '"' + original.replace(/"/g, "'") + '"' : "null") +
+        ",\n" +
+        '  "headlines": ["...", "...", "...", "...", "..."]\n' +
+        "}";
+    }
 
     let data;
     try {
-      data = await sampleApi.json(prompt, {
-        images: [currentFile],
-        modelTier: "default",
-        cache: false,
-      });
+      data = await sampleApi.json(prompt, sampleOptions);
     } catch (err) {
       handleSampleError(err);
       generateBtn.disabled = false;
       return;
+    }
+
+    if (!hasImages) {
+      data.has_solid_box = false;
+      data.text_color = "#FFFFFF";
+      data.style_notes = "bold caps, bottom banner";
     }
 
     renderScan(data);
@@ -529,14 +644,14 @@
     const headlines = Array.isArray(data.headlines) ? data.headlines.filter(Boolean).slice(0, 5) : [];
     if (headlines.length === 0) {
       setStatus("err", "Claude didn't return any headlines — try again");
-      generateBtn.disabled = false;
+      refreshGenerateEnabled();
       return;
     }
 
     setStatus("busy", "Rendering variants...");
     await renderVariants(data, headlines);
     setStatus("ok", "Done — " + headlines.length + " variants ready");
-    generateBtn.disabled = false;
+    refreshGenerateEnabled();
   });
 
   function handleSampleError(err) {
