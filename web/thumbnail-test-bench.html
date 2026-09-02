@@ -1,0 +1,760 @@
+<title>Thumbnail Test Bench</title>
+<meta name="description" content="Upload a YouTube thumbnail and get 5 alternate headline treatments rendered back onto it." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+/>
+<style>
+  :root {
+    --bg: #f5f2ea;
+    --surface: #ffffff;
+    --surface-sunken: #ede8dc;
+    --border: #ddd6c4;
+    --text: #1c1a15;
+    --text-dim: #6e6857;
+    --text-faint: #9c9585;
+    --accent: #ff4d23;
+    --accent-ink: #fff8f0;
+    --ok: #2f8f5b;
+    --warn: #b6791a;
+    --err: #c93f2e;
+    --shadow: 0 1px 0 rgba(28, 26, 21, 0.05);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131210;
+      --surface: #1c1a16;
+      --surface-sunken: #15130f;
+      --border: #322e25;
+      --text: #f2eee2;
+      --text-dim: #a89f8b;
+      --text-faint: #75705f;
+      --accent: #ff6a3d;
+      --accent-ink: #1c0d05;
+      --ok: #4cbf85;
+      --warn: #e0a83f;
+      --err: #ef6b58;
+      --shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #131210;
+    --surface: #1c1a16;
+    --surface-sunken: #15130f;
+    --border: #322e25;
+    --text: #f2eee2;
+    --text-dim: #a89f8b;
+    --text-faint: #75705f;
+    --accent: #ff6a3d;
+    --accent-ink: #1c0d05;
+    --ok: #4cbf85;
+    --warn: #e0a83f;
+    --err: #ef6b58;
+    --shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  header.top {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 36px;
+  }
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1 {
+    font-family: "Archivo Black", "IBM Plex Sans", sans-serif;
+    font-weight: 400;
+    font-size: clamp(30px, 4.4vw, 44px);
+    line-height: 1.02;
+    margin: 0;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+  .sub {
+    color: var(--text-dim);
+    font-size: 15px;
+    max-width: 62ch;
+    line-height: 1.55;
+    margin: 0;
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+  }
+
+  .workbench {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
+  @media (min-width: 760px) {
+    .workbench { grid-template-columns: 340px minmax(0, 1fr); align-items: start; }
+  }
+
+  .source-panel { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+
+  .dropzone {
+    border: 1.5px dashed var(--border);
+    border-radius: 8px;
+    background: var(--surface-sunken);
+    aspect-ratio: 16 / 9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color 120ms ease;
+  }
+  .dropzone:hover, .dropzone.drag { border-color: var(--accent); }
+  .dropzone canvas { width: 100%; height: 100%; object-fit: contain; display: none; background: var(--surface-sunken); }
+  .dropzone-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-faint);
+    padding: 16px;
+    text-align: center;
+  }
+  .dropzone-empty svg { opacity: 0.6; }
+  .dropzone-empty .hint { font-size: 12.5px; }
+  .dropzone-empty .action { color: var(--accent); font-weight: 600; font-size: 13.5px; }
+  .dropzone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+  .file-meta {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11.5px;
+    color: var(--text-faint);
+    display: flex;
+    justify-content: space-between;
+    min-height: 14px;
+  }
+
+  button.primary {
+    appearance: none;
+    border: none;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-family: "IBM Plex Sans", sans-serif;
+    font-weight: 600;
+    font-size: 14.5px;
+    padding: 12px 16px;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: transform 80ms ease, filter 120ms ease;
+  }
+  button.primary:hover:not(:disabled) { filter: brightness(1.06); }
+  button.primary:active:not(:disabled) { transform: scale(0.98); }
+  button.primary:disabled { opacity: 0.45; cursor: not-allowed; }
+  button.primary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .status-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); flex: none; }
+  .status-dot.busy { background: var(--warn); animation: pulse 1.1s ease-in-out infinite; }
+  .status-dot.ok { background: var(--ok); }
+  .status-dot.err { background: var(--err); }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+  .status-text { color: var(--text-dim); }
+
+  .scan {
+    background: var(--surface-sunken);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 12px 13px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--text-dim);
+    display: none;
+  }
+  .scan.show { display: block; }
+  .scan .row { display: flex; gap: 8px; }
+  .scan .k { color: var(--text-faint); flex: none; width: 78px; }
+  .scan .v { color: var(--text); word-break: break-word; }
+
+  .results-panel { padding: 18px; display: flex; flex-direction: column; gap: 16px; min-height: 100%; }
+  .results-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .results-head h2 {
+    font-family: "Archivo Black", sans-serif;
+    font-weight: 400;
+    font-size: 15px;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    margin: 0;
+    color: var(--text-dim);
+  }
+  .results-count { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--text-faint); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px;
+  }
+
+  .empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: var(--text-faint);
+    padding: 60px 20px;
+    text-align: center;
+    font-size: 13.5px;
+  }
+
+  .card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--surface-sunken);
+    display: flex;
+    flex-direction: column;
+  }
+  .card canvas { width: 100%; display: block; aspect-ratio: 16 / 9; object-fit: cover; background: #000; }
+  .card-foot {
+    padding: 10px 11px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .card-headline {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.01em;
+    color: var(--text-dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .save-btn {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 5px 9px;
+    border-radius: 5px;
+    cursor: pointer;
+    flex: none;
+  }
+  .save-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .save-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .angle-tag {
+    display: inline-block;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+    padding: 5px 11px 0;
+  }
+
+  .footnote {
+    margin-top: 26px;
+    color: var(--text-faint);
+    font-size: 12px;
+    line-height: 1.6;
+    max-width: 68ch;
+  }
+  .footnote code {
+    font-family: "IBM Plex Mono", monospace;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 11px;
+  }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow">CTR Workshop &middot; 01</div>
+    <h1>Thumbnail Test Bench</h1>
+    <p class="sub">
+      Drop in a thumbnail. Claude reads the headline that's already on it, then drafts five
+      alternate takes — curiosity, bold claim, number, question, shock — rendered back onto
+      the image so you can compare them side by side before you upload.
+    </p>
+  </header>
+
+  <div class="workbench">
+    <section class="panel source-panel">
+      <label class="dropzone" id="dropzone">
+        <canvas id="sourceCanvas"></canvas>
+        <div class="dropzone-empty" id="dropzoneEmpty">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <circle cx="9" cy="10.5" r="1.6" />
+            <path d="M21 16.5l-5.5-5.5a2 2 0 0 0-2.8 0L4 19" />
+          </svg>
+          <div class="action">Choose a thumbnail</div>
+          <div class="hint">or drag one in &middot; JPG / PNG / WebP</div>
+        </div>
+        <input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp" />
+      </label>
+
+      <div class="file-meta" id="fileMeta"></div>
+
+      <button class="primary" id="generateBtn" disabled>Generate 5 headlines</button>
+
+      <div class="status-row">
+        <span class="status-dot" id="statusDot"></span>
+        <span class="status-text" id="statusText">Waiting for a thumbnail</span>
+      </div>
+
+      <div class="scan" id="scan"></div>
+    </section>
+
+    <section class="panel results-panel">
+      <div class="results-head">
+        <h2>Variants</h2>
+        <span class="results-count" id="resultsCount"></span>
+      </div>
+      <div class="empty-state" id="emptyState">
+        Upload a thumbnail and generate to see five headline treatments here.
+      </div>
+      <div class="grid" id="grid" style="display: none"></div>
+    </section>
+  </div>
+
+  <p class="footnote">
+    Runs on your own Claude usage via this artifact's <code>sample</code> capability — no
+    server, no API key. Nothing you upload is stored; images are only sent to Claude for the
+    single analysis call. Saving a variant uses the <code>downloads</code> capability, so your
+    browser asks you to confirm each file.
+  </p>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  const ANGLE_LABELS = ["Curiosity", "Bold claim", "Number", "Question", "Shock"];
+  const FONT_STACK = '"Archivo Black", "IBM Plex Sans", sans-serif';
+
+  const dropzone = document.getElementById("dropzone");
+  const dropzoneEmpty = document.getElementById("dropzoneEmpty");
+  const fileInput = document.getElementById("fileInput");
+  const sourceCanvas = document.getElementById("sourceCanvas");
+  const fileMeta = document.getElementById("fileMeta");
+  const generateBtn = document.getElementById("generateBtn");
+  const statusDot = document.getElementById("statusDot");
+  const statusText = document.getElementById("statusText");
+  const scanEl = document.getElementById("scan");
+  const grid = document.getElementById("grid");
+  const emptyState = document.getElementById("emptyState");
+  const resultsCount = document.getElementById("resultsCount");
+
+  let currentFile = null;
+  let currentImage = null; // HTMLImageElement, natural size
+  let sampleApi = null;
+  let downloadsApi = null;
+
+  function setStatus(state, text) {
+    statusDot.className = "status-dot" + (state ? " " + state : "");
+    statusText.textContent = text;
+  }
+
+  function fmtBytes(n) {
+    if (n < 1024) return n + " B";
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+    return (n / (1024 * 1024)).toFixed(2) + " MB";
+  }
+
+  // ---------- file intake ----------
+
+  function loadFile(file) {
+    if (!file || !/^image\/(jpeg|png|webp)$/.test(file.type)) {
+      setStatus("err", "Unsupported file type — use JPG, PNG or WebP");
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      currentFile = file;
+      currentImage = img;
+      drawSource(img);
+      dropzoneEmpty.style.display = "none";
+      sourceCanvas.style.display = "block";
+      fileMeta.textContent = "";
+      fileMeta.innerHTML =
+        "<span>" + img.naturalWidth + "×" + img.naturalHeight + "</span><span>" + fmtBytes(file.size) + "</span>";
+      generateBtn.disabled = !sampleApi;
+      setStatus("", sampleApi ? "Ready to generate" : "Sampling unavailable in this view");
+      scanEl.classList.remove("show");
+      scanEl.innerHTML = "";
+      clearResults();
+      URL.revokeObjectURL(url);
+    };
+    img.onerror = () => setStatus("err", "Couldn't read that image");
+    img.src = url;
+  }
+
+  fileInput.addEventListener("change", (e) => {
+    if (e.target.files && e.target.files[0]) loadFile(e.target.files[0]);
+  });
+  ["dragenter", "dragover"].forEach((evt) =>
+    dropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      dropzone.classList.add("drag");
+    })
+  );
+  ["dragleave", "drop"].forEach((evt) =>
+    dropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      dropzone.classList.remove("drag");
+    })
+  );
+  dropzone.addEventListener("drop", (e) => {
+    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) loadFile(file);
+  });
+
+  function drawSource(img) {
+    sourceCanvas.width = img.naturalWidth;
+    sourceCanvas.height = img.naturalHeight;
+    const ctx = sourceCanvas.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+  }
+
+  function clearResults() {
+    grid.innerHTML = "";
+    grid.style.display = "none";
+    emptyState.style.display = "flex";
+    resultsCount.textContent = "";
+  }
+
+  // ---------- capability setup ----------
+
+  (async () => {
+    try {
+      sampleApi = (await window.claude?.use?.("sample")) || null;
+    } catch (_) {
+      sampleApi = null;
+    }
+    try {
+      downloadsApi = (await window.claude?.use?.("downloads")) || null;
+    } catch (_) {
+      downloadsApi = null;
+    }
+    if (!sampleApi) {
+      setStatus("err", "This page needs to run inside a Claude viewer to generate headlines");
+    } else if (currentImage) {
+      generateBtn.disabled = false;
+      setStatus("", "Ready to generate");
+    } else {
+      setStatus("", "Waiting for a thumbnail");
+    }
+  })();
+
+  // ---------- generation ----------
+
+  generateBtn.addEventListener("click", async () => {
+    if (!sampleApi || !currentFile || !currentImage) return;
+    generateBtn.disabled = true;
+    setStatus("busy", "Reading the thumbnail...");
+    scanEl.classList.remove("show");
+    clearResults();
+
+    const prompt =
+      "You are looking at a YouTube thumbnail image. Do two things and reply with ONLY a single " +
+      "JSON object (no prose, no markdown fences):\n\n" +
+      "1. Read the thumbnail: its topic, the exact headline/caption text currently overlaid on it " +
+      "(or null if there is none), where that text sits, and how it's styled.\n" +
+      "2. Write 5 alternate headlines for the SAME thumbnail, one for each of these angles, in this " +
+      "exact order: curiosity gap, bold claim, number/stat, question, shock or controversy. Each " +
+      "headline must be short (2-6 words), punchy, and in the same tone as the original if one exists.\n\n" +
+      "Reply with exactly this shape:\n" +
+      "{\n" +
+      '  "topic": "short description of what the thumbnail is about",\n' +
+      '  "original_headline": "exact overlaid text, or null",\n' +
+      '  "bbox": [x0, y0, x1, y1],\n' +
+      '  "has_solid_box": true or false,\n' +
+      '  "box_color": "#RRGGBB or null",\n' +
+      '  "text_color": "#RRGGBB",\n' +
+      '  "style_notes": "brief note on font weight/case/style",\n' +
+      '  "headlines": ["...", "...", "...", "...", "..."]\n' +
+      "}\n\n" +
+      "bbox is the bounding box of the headline text (or its background box) as fractions of the " +
+      "image width/height, 0.0 to 1.0. If there is no existing text, pick a natural spot for a " +
+      "headline banner (commonly the bottom ~22% of the frame) and set has_solid_box to false.";
+
+    let data;
+    try {
+      data = await sampleApi.json(prompt, {
+        images: [currentFile],
+        modelTier: "default",
+        cache: false,
+      });
+    } catch (err) {
+      handleSampleError(err);
+      generateBtn.disabled = false;
+      return;
+    }
+
+    renderScan(data);
+
+    const headlines = Array.isArray(data.headlines) ? data.headlines.filter(Boolean).slice(0, 5) : [];
+    if (headlines.length === 0) {
+      setStatus("err", "Claude didn't return any headlines — try again");
+      generateBtn.disabled = false;
+      return;
+    }
+
+    setStatus("busy", "Rendering variants...");
+    await renderVariants(data, headlines);
+    setStatus("ok", "Done — " + headlines.length + " variants ready");
+    generateBtn.disabled = false;
+  });
+
+  function handleSampleError(err) {
+    const code = err && err.code;
+    const copy = {
+      not_granted: "You declined Claude access for this page — reload to try again.",
+      sampling_disabled: "Claude isn't available for this account right now.",
+      images_unavailable: "This view can't send images to Claude.",
+      image_rejected: "That image was rejected (too large or unreadable) — try another file.",
+      rate_limited: "Too many requests right now — wait a moment and try again.",
+      prompt_too_large: "That request was too large — try a smaller image.",
+      invalid_json: "Claude's reply wasn't valid JSON — try again.",
+      refused: "Claude declined to process this image.",
+      empty_completion: "Claude returned an empty reply — try again.",
+      cancelled: "Cancelled.",
+    };
+    setStatus("err", copy[code] || "Something went wrong generating headlines — try again.");
+  }
+
+  function renderScan(data) {
+    const rows = [
+      ["topic", data.topic || "—"],
+      ["headline", data.original_headline || "(none detected)"],
+      ["style", data.style_notes || "—"],
+    ];
+    scanEl.innerHTML = rows
+      .map(
+        (r) =>
+          '<div class="row"><span class="k">' +
+          r[0] +
+          '</span><span class="v">' +
+          escapeHtml(String(r[1])) +
+          "</span></div>"
+      )
+      .join("");
+    scanEl.classList.add("show");
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  // ---------- rendering ----------
+
+  async function renderVariants(analysis, headlines) {
+    await document.fonts.load('900 100px "Archivo Black"').catch(() => {});
+
+    emptyState.style.display = "none";
+    grid.style.display = "grid";
+    grid.innerHTML = "";
+    resultsCount.textContent = headlines.length + " / 5";
+
+    const bbox = Array.isArray(analysis.bbox) && analysis.bbox.length === 4 ? analysis.bbox : [0.0, 0.72, 1.0, 0.95];
+
+    headlines.forEach((headline, i) => {
+      const canvas = renderOne(currentImage, analysis, bbox, headline);
+
+      const card = document.createElement("div");
+      card.className = "card";
+
+      const tag = document.createElement("div");
+      tag.className = "angle-tag";
+      tag.textContent = ANGLE_LABELS[i] || "Variant " + (i + 1);
+      card.appendChild(tag);
+
+      card.appendChild(canvas);
+
+      const foot = document.createElement("div");
+      foot.className = "card-foot";
+      const label = document.createElement("div");
+      label.className = "card-headline";
+      label.textContent = headline;
+      label.title = headline;
+      const saveBtn = document.createElement("button");
+      saveBtn.className = "save-btn";
+      saveBtn.textContent = "Save";
+      saveBtn.disabled = !downloadsApi;
+      saveBtn.addEventListener("click", () => saveVariant(canvas, headline, saveBtn));
+      foot.appendChild(label);
+      foot.appendChild(saveBtn);
+      card.appendChild(foot);
+
+      grid.appendChild(card);
+    });
+  }
+
+  function renderOne(img, analysis, bboxFrac, headline) {
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, w, h);
+
+    const pad = Math.round(0.02 * h);
+    let [x0, y0, x1, y1] = bboxFrac;
+    let box = {
+      x: Math.max(Math.round(x0 * w) - pad, 0),
+      y: Math.max(Math.round(y0 * h) - pad, 0),
+      x2: Math.min(Math.round(x1 * w) + pad, w),
+      y2: Math.min(Math.round(y1 * h) + pad, h),
+    };
+    box.w = box.x2 - box.x;
+    box.h = box.y2 - box.y;
+    if (box.w <= 0 || box.h <= 0) {
+      box = { x: 0, y: Math.round(h * 0.72), x2: w, y2: h, w, h: Math.round(h * 0.28) };
+    }
+
+    if (analysis.has_solid_box && analysis.box_color) {
+      ctx.fillStyle = analysis.box_color;
+      ctx.fillRect(box.x, box.y, box.w, box.h);
+    } else {
+      const tmp = document.createElement("canvas");
+      tmp.width = box.w;
+      tmp.height = box.h;
+      const tctx = tmp.getContext("2d");
+      tctx.filter = "blur(" + Math.max(Math.round(box.h / 14), 3) + "px)";
+      tctx.drawImage(canvas, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h);
+      ctx.drawImage(tmp, box.x, box.y);
+      ctx.fillStyle = "rgba(0,0,0,0.45)";
+      ctx.fillRect(box.x, box.y, box.w, box.h);
+    }
+
+    const text = headline.toUpperCase();
+    const textColor = analysis.text_color || "#FFFFFF";
+    const strokeColor = textColor.toUpperCase() === "#000000" ? "#FFFFFF" : "#000000";
+    const maxW = box.w * 0.92;
+    const maxH = box.h * 0.86;
+
+    let fontSize = box.h;
+    let lines = [text];
+    let lineHeight = fontSize;
+    while (fontSize > 10) {
+      ctx.font = fontSize + "px " + FONT_STACK;
+      lines = wrapText(ctx, text, maxW);
+      lineHeight = fontSize * 1.14;
+      const totalH = lineHeight * lines.length;
+      const widest = Math.max(...lines.map((l) => ctx.measureText(l).width));
+      if (totalH <= maxH && widest <= maxW) break;
+      fontSize -= 2;
+    }
+
+    ctx.font = fontSize + "px " + FONT_STACK;
+    ctx.textBaseline = "alphabetic";
+    const totalH = lineHeight * lines.length;
+    let ty = box.y + (box.h - totalH) / 2 + fontSize * 0.86;
+    const strokeW = Math.max(fontSize / 16, 2);
+    lines.forEach((line) => {
+      const tw = ctx.measureText(line).width;
+      const tx = box.x + (box.w - tw) / 2;
+      ctx.lineJoin = "round";
+      ctx.miterLimit = 2;
+      ctx.lineWidth = strokeW;
+      ctx.strokeStyle = strokeColor;
+      ctx.strokeText(line, tx, ty);
+      ctx.fillStyle = textColor;
+      ctx.fillText(line, tx, ty);
+      ty += lineHeight;
+    });
+
+    return canvas;
+  }
+
+  function wrapText(ctx, text, maxW) {
+    const words = text.split(/\s+/);
+    const lines = [];
+    let current = "";
+    for (const word of words) {
+      const candidate = current ? current + " " + word : word;
+      if (ctx.measureText(candidate).width <= maxW || !current) {
+        current = candidate;
+      } else {
+        lines.push(current);
+        current = word;
+      }
+    }
+    if (current) lines.push(current);
+    return lines;
+  }
+
+  // ---------- save ----------
+
+  function saveVariant(canvas, headline, btn) {
+    if (!downloadsApi) return;
+    btn.disabled = true;
+    const original = btn.textContent;
+    btn.textContent = "...";
+    canvas.toBlob(
+      async (blob) => {
+        if (!blob) {
+          btn.textContent = original;
+          btn.disabled = false;
+          return;
+        }
+        const slug = headline
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/(^-|-$)/g, "")
+          .slice(0, 40) || "headline";
+        try {
+          await downloadsApi.save({ filename: "thumbnail-" + slug + ".jpg", data: blob });
+          btn.textContent = "Saved";
+          setTimeout(() => {
+            btn.textContent = original;
+            btn.disabled = false;
+          }, 1400);
+        } catch (err) {
+          btn.textContent = err && err.code === "declined" ? original : "Failed";
+          btn.disabled = false;
+          if (err && err.code !== "declined") {
+            setTimeout(() => (btn.textContent = original), 1600);
+          }
+        }
+      },
+      "image/jpeg",
+      0.92
+    );
+  }
+})();
+</script>
