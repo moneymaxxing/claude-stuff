@@ -4,7 +4,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link
   rel="stylesheet"
-  href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+  href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Baloo+2:wght@700;800&family=Bangers&family=Roboto+Slab:wght@700&family=Playfair+Display:ital,wght@0,700;0,900;1,700;1,900&family=Oswald:wght@600;700&family=Space+Mono:wght@700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
 />
 <style>
   :root {
@@ -413,7 +413,30 @@
   "use strict";
 
   const ANGLE_LABELS = ["Curiosity", "Bold claim", "Number", "Question", "Shock"];
-  const FONT_STACK = '"Archivo Black", "IBM Plex Sans", sans-serif';
+
+  // Curated headline faces the renderer can pick between, keyed to what
+  // the analysis step reports about the original thumbnail's lettering.
+  const FONT_MAP = {
+    impact: { family: '"Anton", "Archivo Black", sans-serif', weight: 400 },
+    "black-sans": { family: '"Archivo Black", sans-serif', weight: 400 },
+    rounded: { family: '"Baloo 2", sans-serif', weight: 800 },
+    script: { family: '"Bangers", cursive', weight: 400 },
+    slab: { family: '"Roboto Slab", serif', weight: 700 },
+    "elegant-serif": { family: '"Playfair Display", serif', weight: 900 },
+    condensed: { family: '"Oswald", sans-serif', weight: 700 },
+    "mono-tech": { family: '"Space Mono", monospace', weight: 700 },
+  };
+  const DEFAULT_FONT_STYLE = "impact";
+
+  const FONT_STYLE_GUIDE =
+    "- impact: tall bold condensed sans, all-caps, high-energy (classic YouTube reaction style)\n" +
+    "- black-sans: ultra-thick blocky sans, no condensation, very heavy\n" +
+    "- rounded: soft rounded extra-bold sans, playful and friendly\n" +
+    "- script: bold cartoon/comic lettering with punchy energy\n" +
+    "- slab: sturdy bold slab serif, documentary/news feel\n" +
+    "- elegant-serif: high-contrast dramatic display serif, editorial/luxury feel\n" +
+    "- condensed: tall narrow bold sans, clean and modern\n" +
+    "- mono-tech: bold monospace, tech/gaming/glitch feel";
 
   const dropzone = document.getElementById("dropzone");
   const dropzoneEmpty = document.getElementById("dropzoneEmpty");
@@ -583,6 +606,10 @@
         "2. Write 5 alternate headlines for the SAME thumbnail, one for each of these angles, in this " +
         "exact order: curiosity gap, bold claim, number/stat, question, shock or controversy. Each " +
         "headline must be short (2-6 words), punchy, and in the same tone as the original if one exists.\n\n" +
+        "Also identify the ORIGINAL headline's lettering style so it can be matched. Pick the " +
+        "closest font_style from this list:\n" +
+        FONT_STYLE_GUIDE +
+        "\n\n" +
         "Reply with exactly this shape:\n" +
         "{\n" +
         '  "topic": "short description of what the thumbnail is about",\n' +
@@ -591,12 +618,17 @@
         '  "has_solid_box": true or false,\n' +
         '  "box_color": "#RRGGBB or null",\n' +
         '  "text_color": "#RRGGBB",\n' +
+        '  "font_style": "one of the keys above, whichever best matches the original lettering",\n' +
+        '  "italic": true or false,\n' +
+        '  "letter_spacing": "tight" or "normal" or "wide",\n' +
+        '  "text_case": "upper" or "title" or "as-is" (as-is if the original text is not all-caps),\n' +
         '  "style_notes": "brief note on font weight/case/style",\n' +
         '  "headlines": ["...", "...", "...", "...", "..."]\n' +
         "}\n\n" +
         "bbox is the bounding box of the headline text (or its background box) as fractions of the " +
         "image width/height, 0.0 to 1.0. If there is no existing text, pick a natural spot for a " +
-        "headline banner (commonly the bottom ~22% of the frame) and set has_solid_box to false.";
+        "headline banner (commonly the bottom ~22% of the frame), set has_solid_box to false, and " +
+        'use font_style "impact" with text_case "upper".';
       sampleOptions.images = [currentFile];
     } else {
       setStatus("busy", "Drafting headlines...");
@@ -636,6 +668,10 @@
     if (!hasImages) {
       data.has_solid_box = false;
       data.text_color = "#FFFFFF";
+      data.font_style = DEFAULT_FONT_STYLE;
+      data.italic = false;
+      data.letter_spacing = "normal";
+      data.text_case = "upper";
       data.style_notes = "bold caps, bottom banner";
     }
 
@@ -675,6 +711,7 @@
     const rows = [
       ["topic", data.topic || "—"],
       ["headline", data.original_headline || "(none detected)"],
+      ["font match", data.font_style || "—"],
       ["style", data.style_notes || "—"],
     ];
     scanEl.innerHTML = rows
@@ -697,7 +734,9 @@
   // ---------- rendering ----------
 
   async function renderVariants(analysis, headlines) {
-    await document.fonts.load('900 100px "Archivo Black"').catch(() => {});
+    const chosen = FONT_MAP[analysis.font_style] || FONT_MAP[DEFAULT_FONT_STYLE];
+    const italicPrefix = analysis.italic ? "italic " : "";
+    await document.fonts.load(italicPrefix + chosen.weight + ' 100px ' + chosen.family).catch(() => {});
 
     emptyState.style.display = "none";
     grid.style.display = "grid";
@@ -776,26 +815,33 @@
       ctx.fillRect(box.x, box.y, box.w, box.h);
     }
 
-    const text = headline.toUpperCase();
+    const text = applyCase(headline, analysis.text_case);
     const textColor = analysis.text_color || "#FFFFFF";
     const strokeColor = textColor.toUpperCase() === "#000000" ? "#FFFFFF" : "#000000";
     const maxW = box.w * 0.92;
     const maxH = box.h * 0.86;
 
+    const fontStyle = FONT_MAP[analysis.font_style] || FONT_MAP[DEFAULT_FONT_STYLE];
+    const italicPrefix = analysis.italic ? "italic " : "";
+    const fontStack = italicPrefix + fontStyle.weight + " {size}px " + fontStyle.family;
+    if ("letterSpacing" in ctx) {
+      ctx.letterSpacing = { tight: "-0.01em", wide: "0.06em" }[analysis.letter_spacing] || "0em";
+    }
+
     let fontSize = box.h;
     let lines = [text];
     let lineHeight = fontSize;
     while (fontSize > 10) {
-      ctx.font = fontSize + "px " + FONT_STACK;
+      ctx.font = fontStack.replace("{size}", fontSize);
       lines = wrapText(ctx, text, maxW);
-      lineHeight = fontSize * 1.14;
+      lineHeight = fontSize * 1.16;
       const totalH = lineHeight * lines.length;
       const widest = Math.max(...lines.map((l) => ctx.measureText(l).width));
       if (totalH <= maxH && widest <= maxW) break;
       fontSize -= 2;
     }
 
-    ctx.font = fontSize + "px " + FONT_STACK;
+    ctx.font = fontStack.replace("{size}", fontSize);
     ctx.textBaseline = "alphabetic";
     const totalH = lineHeight * lines.length;
     let ty = box.y + (box.h - totalH) / 2 + fontSize * 0.86;
@@ -814,6 +860,14 @@
     });
 
     return canvas;
+  }
+
+  function applyCase(text, textCase) {
+    if (textCase === "as-is") return text;
+    if (textCase === "title") {
+      return text.replace(/\w\S*/g, (w) => w[0].toUpperCase() + w.slice(1).toLowerCase());
+    }
+    return text.toUpperCase();
   }
 
   function wrapText(ctx, text, maxW) {
