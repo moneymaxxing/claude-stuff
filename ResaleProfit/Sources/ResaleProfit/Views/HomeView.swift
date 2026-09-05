@@ -8,7 +8,7 @@ struct HomeView: View {
     @State private var buyerPriceText = ""
 
     @State private var isLoading = false
-    @State private var appraisal: ItemAppraisal?
+    @State private var profitResult: ProfitResult?
     @State private var errorMessage: String?
 
     private var buyerPrice: Double? {
@@ -30,10 +30,8 @@ struct HomeView: View {
                             .multilineTextAlignment(.center)
                     }
 
-                    if let appraisal, let buyerPrice {
-                        ResultCardView(
-                            result: ProfitResult(appraisal: appraisal, buyerAskingPrice: buyerPrice)
-                        )
+                    if let profitResult {
+                        ResultCardView(result: profitResult)
                     }
                 }
                 .padding()
@@ -51,7 +49,7 @@ struct HomeView: View {
             .sheet(isPresented: $showCamera) {
                 ImagePicker(source: .camera) { image in
                     capturedImage = image
-                    appraisal = nil
+                    profitResult = nil
                     errorMessage = nil
                 }
                 .ignoresSafeArea()
@@ -59,7 +57,7 @@ struct HomeView: View {
             .sheet(isPresented: $showPhotoLibrary) {
                 ImagePicker(source: .photoLibrary) { image in
                     capturedImage = image
-                    appraisal = nil
+                    profitResult = nil
                     errorMessage = nil
                 }
                 .ignoresSafeArea()
@@ -144,16 +142,17 @@ struct HomeView: View {
     }
 
     private func analyze() {
-        guard let capturedImage else { return }
+        guard let capturedImage, let buyerPrice else { return }
         errorMessage = nil
-        appraisal = nil
+        profitResult = nil
         isLoading = true
 
         Task {
             do {
-                let result = try await AppraisalService().appraise(image: capturedImage)
+                let appraisal = try await AppraisalService().appraise(image: capturedImage)
+                let result = await resolveProfitResult(appraisal: appraisal, buyerPrice: buyerPrice)
                 await MainActor.run {
-                    appraisal = result
+                    profitResult = result
                     isLoading = false
                 }
             } catch {
@@ -162,6 +161,24 @@ struct HomeView: View {
                     isLoading = false
                 }
             }
+        }
+    }
+
+    /// Prefers a live average from eBay's Browse API; falls back to the
+    /// AI's own estimate if no eBay keys are configured or the lookup fails.
+    private func resolveProfitResult(appraisal: ItemAppraisal, buyerPrice: Double) async -> ProfitResult {
+        do {
+            let stats = try await EbayPricingService.shared.averagePrice(forQuery: appraisal.itemName)
+            return ProfitResult(
+                appraisal: appraisal,
+                buyerAskingPrice: buyerPrice,
+                averagePrice: stats.averagePrice,
+                priceLow: stats.low,
+                priceHigh: stats.high,
+                priceSource: .ebayListings(count: stats.sampleSize)
+            )
+        } catch {
+            return ProfitResult(appraisal: appraisal, buyerAskingPrice: buyerPrice)
         }
     }
 }

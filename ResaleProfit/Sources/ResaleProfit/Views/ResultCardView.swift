@@ -25,10 +25,14 @@ struct ResultCardView: View {
             Divider()
 
             HStack {
-                labeledValue("Avg. Listing Price", format(result.appraisal.averagePrice))
+                labeledValue("Avg. Listing Price", format(result.averagePrice))
                 Spacer()
                 labeledValue("Asking Price", format(result.buyerAskingPrice))
             }
+
+            Text("Range: \(format(result.priceLow)) - \(format(result.priceHigh)) - \(result.priceSource.label)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
             HStack {
                 Text("Estimated Profit")
@@ -44,9 +48,11 @@ struct ResultCardView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
-            Text("Estimate only, based on the model's general market knowledge - not a live marketplace lookup.")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            if case .aiEstimate = result.priceSource {
+                Text("Estimate only, based on the model's general market knowledge. Add eBay developer keys in Settings for real listing prices.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding()
         .background(RoundedRectangle(cornerRadius: 16).fill(Color.secondary.opacity(0.08)))
